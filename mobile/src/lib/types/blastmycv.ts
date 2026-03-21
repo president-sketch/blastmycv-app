@@ -1,3 +1,17 @@
+export interface Package {
+  id: number;
+  name: string;
+  description: string;
+  price: string;
+  employersReached: string;
+  countries: string[];
+  features: string[];
+  isPopular: boolean;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface JobListing {
   id: string;
   title: string;

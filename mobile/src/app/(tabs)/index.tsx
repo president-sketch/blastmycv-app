@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { View, Text, ScrollView, Pressable, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Bell,
@@ -11,7 +11,10 @@ import {
   Sparkles,
   FileEdit,
   Search,
+  ChevronRight,
 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../lib/state/auth-store';
 
 const stats = {
@@ -52,6 +55,7 @@ function ActivityDot({ icon }: { icon: string }) {
 }
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? user?.name?.split(' ')[0] ?? 'there';
 
@@ -223,6 +227,36 @@ export default function DashboardScreen() {
             ))}
           </View>
         </View>
+
+        {/* Blast My CV Banner */}
+        <TouchableOpacity
+          onPress={() => router.push('/packages')}
+          activeOpacity={0.9}
+          testID="blast-cv-button"
+          style={{ marginBottom: 24, marginHorizontal: 20 }}
+        >
+          <LinearGradient
+            colors={['#FF6B35', '#CC4A1A']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 18,
+              padding: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>
+                Blast My CV
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+                Reach 15,000+ employers across the region
+              </Text>
+            </View>
+            <ChevronRight size={24} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
 
         {/* Quick Actions */}
         <View style={{ paddingHorizontal: 20 }}>
