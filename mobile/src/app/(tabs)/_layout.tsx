@@ -1,6 +1,7 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { View, Text } from 'react-native';
 import { Home, Briefcase, FileText, User, Search } from 'lucide-react-native';
+import { useAuthStore } from '../../lib/state/auth-store';
 
 interface TabIconProps {
   focused: boolean;
@@ -27,6 +28,12 @@ function TabIcon({ focused, icon, label }: TabIconProps) {
 }
 
 export default function TabsLayout() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
