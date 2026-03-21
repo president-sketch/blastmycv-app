@@ -1,306 +1,180 @@
-import { View, Text, ScrollView, Pressable, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Bell,
-  Briefcase,
-  Eye,
-  Crosshair,
-  Calendar,
-  CheckCircle,
-  UserCheck,
-  Sparkles,
-  FileEdit,
-  Search,
-  ChevronRight,
-} from 'lucide-react-native';
+import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { Bell, Package, FileText, Zap, ChevronRight, Clock, CheckCircle, AlertCircle, Loader } from 'lucide-react-native';
 import { useAuthStore } from '../../lib/state/auth-store';
+import { getOrders, getNotifications, getCVs } from '../../lib/api/blastmycv-api';
+import type { Order, Notification } from '../../lib/types/blastmycv';
 
-const stats = {
-  applications: 12,
-  profileViews: 89,
-  jobMatches: 34,
-  interviews: 2,
+const STATUS_COLOR: Record<string, string> = {
+  pending: '#F59E0B',
+  processing: '#3B82F6',
+  completed: '#22C55E',
+  failed: '#EF4444',
 };
 
-const recentActivity = [
-  { id: '1', icon: 'apply', title: 'Applied to Senior Developer', company: 'TechCorp UK', time: '2h ago' },
-  { id: '2', icon: 'view', title: 'Profile viewed', company: 'Digital Agency Ltd', time: '5h ago' },
-  { id: '3', icon: 'match', title: 'New job match', company: 'StartupXYZ', time: '1d ago' },
-];
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  pending: <Clock size={14} color="#F59E0B" />,
+  processing: <Loader size={14} color="#3B82F6" />,
+  completed: <CheckCircle size={14} color="#22C55E" />,
+  failed: <AlertCircle size={14} color="#EF4444" />,
+};
 
-function ActivityDot({ icon }: { icon: string }) {
-  const colors: Record<string, string> = {
-    apply: '#FF6B35',
-    view: '#3B82F6',
-    match: '#22C55E',
-  };
-  const color = colors[icon] ?? '#888899';
-  const IconComponent = icon === 'apply' ? CheckCircle : icon === 'view' ? UserCheck : Sparkles;
+export default function DashboardScreen() {
+  const user = useAuthStore((s) => s.user);
+  const router = useRouter();
+
+  const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = useQuery({
+    queryKey: ['orders'],
+    queryFn: getOrders,
+  });
+
+  const { data: notifications, refetch: refetchNotifs } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: getNotifications,
+  });
+
+  const { data: cvs, refetch: refetchCVs } = useQuery({
+    queryKey: ['cvs'],
+    queryFn: getCVs,
+  });
+
+  const unread = notifications?.filter((n: Notification) => !n.isRead).length ?? 0;
+  const recentOrders = orders?.slice(0, 3) ?? [];
+  const firstName = user?.firstName || user?.name?.split(' ')[0] || 'there';
+
+  function onRefresh() {
+    refetchOrders();
+    refetchNotifs();
+    refetchCVs();
+  }
+
   return (
-    <View
-      style={{
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        backgroundColor: color + '22',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <IconComponent size={18} color={color} />
+    <View style={{ flex: 1, backgroundColor: '#0A0A14' }}>
+      <StatusBar style="light" />
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={ordersLoading} onRefresh={onRefresh} tintColor="#FF6B35" />}
+          contentContainerStyle={{ paddingBottom: 100 }}
+        >
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 }}>
+            <View>
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Welcome back,</Text>
+              <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '800', marginTop: 2 }}>
+                <Text style={{ color: '#FFFFFF' }}>blastmy</Text>
+                <Text style={{ color: '#FF6B35' }}>CV</Text>
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A1A2E', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A2A40' }}
+              testID="notification-bell"
+            >
+              <Bell size={20} color="#FFFFFF" />
+              {unread > 0 ? (
+                <View style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF6B35' }} />
+              ) : null}
+            </TouchableOpacity>
+          </View>
+
+          {/* Greeting */}
+          <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '800' }}>
+              Hello, {firstName}! 👋
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 15, marginTop: 4 }}>
+              Ready to blast your CV today?
+            </Text>
+          </View>
+
+          {/* Stats Row */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 12, marginBottom: 28 }}>
+            <StatCard label="Orders" value={orders?.length ?? 0} icon={<Package size={18} color="#FF6B35" />} loading={ordersLoading} />
+            <StatCard label="CVs" value={cvs?.length ?? 0} icon={<FileText size={18} color="#3B82F6" />} />
+            <StatCard label="Alerts" value={unread} icon={<Bell size={18} color="#F59E0B" />} />
+          </View>
+
+          {/* Blast CTA */}
+          <TouchableOpacity onPress={() => router.push('/(tabs)/blast')} activeOpacity={0.9} style={{ marginHorizontal: 20, marginBottom: 28 }} testID="blast-cv-button">
+            <LinearGradient
+              colors={['#FF6B35', '#CC4A1A']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 18, padding: 20, flexDirection: 'row', alignItems: 'center' }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 19, fontWeight: '800', marginBottom: 4 }}>🚀 Blast My CV</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>Reach 15,000+ employers across the region</Text>
+              </View>
+              <ChevronRight size={24} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Recent Orders */}
+          <View style={{ paddingHorizontal: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '700' }}>Recent Orders</Text>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/orders')}>
+                <Text style={{ color: '#FF6B35', fontSize: 13, fontWeight: '500' }}>See all</Text>
+              </TouchableOpacity>
+            </View>
+
+            {ordersLoading ? <ActivityIndicator color="#FF6B35" style={{ marginTop: 20 }} testID="loading-indicator" /> : null}
+
+            {!ordersLoading && recentOrders.length === 0 ? (
+              <View style={{ backgroundColor: '#1A1A2E', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#2A2A40' }}>
+                <Package size={32} color="#444466" style={{ marginBottom: 10 }} />
+                <Text style={{ color: '#888899', fontSize: 14, textAlign: 'center' }}>No orders yet. Start by blasting your CV!</Text>
+              </View>
+            ) : null}
+
+            {recentOrders.map((order: Order) => (
+              <OrderRow key={order.id} order={order} />
+            ))}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
 
-export default function DashboardScreen() {
-  const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const firstName = user?.firstName ?? user?.name?.split(' ')[0] ?? 'there';
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
+function StatCard({ label, value, icon, loading }: { label: string; value: number; icon: React.ReactNode; loading?: boolean }) {
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={{ flex: 1, backgroundColor: '#0A0A14' }}
-      testID="dashboard-screen"
-    >
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-      >
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 20,
-            paddingTop: 12,
-            paddingBottom: 20,
-          }}
-        >
-          <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 }}>
-            blastmy<Text style={{ color: '#FF6B35' }}>CV</Text>
-          </Text>
-          <Pressable
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: '#1A1A2E',
-              borderWidth: 1,
-              borderColor: '#2A2A40',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            testID="notification-bell"
-          >
-            <Bell size={18} color="#888899" />
-          </Pressable>
-        </View>
+    <View style={{ flex: 1, backgroundColor: '#1A1A2E', borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#2A2A40' }}>
+      {icon}
+      {loading ? (
+        <ActivityIndicator color="#FF6B35" size="small" style={{ marginTop: 6 }} />
+      ) : (
+        <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '800', marginTop: 6 }}>{value}</Text>
+      )}
+      <Text style={{ color: '#888899', fontSize: 11, marginTop: 2 }}>{label}</Text>
+    </View>
+  );
+}
 
-        {/* Welcome */}
-        <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
-          <Text style={{ fontSize: 26, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 }}>
-            {getGreeting()}, {firstName}!
-          </Text>
-          <Text style={{ fontSize: 14, color: '#888899' }}>Your career at a glance</Text>
+function OrderRow({ order }: { order: Order }) {
+  const color = STATUS_COLOR[order.status] ?? '#888899';
+  return (
+    <View style={{ backgroundColor: '#1A1A2E', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A40', flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 4 }}>
+          {order.package?.name ?? `Order #${order.id}`}
+        </Text>
+        <Text style={{ color: '#888899', fontSize: 12 }}>
+          {order.targetCountries?.join(', ') ?? '—'}
+        </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${color}18`, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+          {STATUS_ICON[order.status]}
+          <Text style={{ color, fontSize: 11, fontWeight: '600', textTransform: 'capitalize' }}>{order.status}</Text>
         </View>
-
-        {/* Stats Grid */}
-        <View style={{ paddingHorizontal: 20, marginBottom: 28 }}>
-          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: '#1A1A2E',
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: '#2A2A40',
-                padding: 16,
-              }}
-            >
-              <Briefcase size={22} color="#FF6B35" />
-              <Text style={{ fontSize: 30, fontWeight: '800', color: '#FFFFFF', marginTop: 10, marginBottom: 2 }}>
-                {stats.applications}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#888899' }}>Applications</Text>
-            </View>
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: '#1A1A2E',
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: '#2A2A40',
-                padding: 16,
-              }}
-            >
-              <Eye size={22} color="#FF6B35" />
-              <Text style={{ fontSize: 30, fontWeight: '800', color: '#FFFFFF', marginTop: 10, marginBottom: 2 }}>
-                {stats.profileViews}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#888899' }}>Profile Views</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: '#1A1A2E',
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: '#2A2A40',
-                padding: 16,
-              }}
-            >
-              <Crosshair size={22} color="#FF6B35" />
-              <Text style={{ fontSize: 30, fontWeight: '800', color: '#FFFFFF', marginTop: 10, marginBottom: 2 }}>
-                {stats.jobMatches}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#888899' }}>Job Matches</Text>
-            </View>
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: '#1A1A2E',
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: '#2A2A40',
-                padding: 16,
-              }}
-            >
-              <Calendar size={22} color="#FF6B35" />
-              <Text style={{ fontSize: 30, fontWeight: '800', color: '#FFFFFF', marginTop: 10, marginBottom: 2 }}>
-                {stats.interviews}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#888899' }}>Interviews</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Recent Activity */}
-        <View style={{ paddingHorizontal: 20, marginBottom: 28 }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 16 }}>
-            Recent Activity
-          </Text>
-          <View
-            style={{
-              backgroundColor: '#1A1A2E',
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: '#2A2A40',
-              overflow: 'hidden',
-            }}
-          >
-            {recentActivity.map((item, index) => (
-              <View key={item.id}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 16,
-                    gap: 12,
-                  }}
-                >
-                  <ActivityDot icon={item.icon} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginBottom: 2 }}>
-                      {item.title}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: '#888899' }}>{item.company}</Text>
-                  </View>
-                  <Text style={{ fontSize: 11, color: '#555566' }}>{item.time}</Text>
-                </View>
-                {index < recentActivity.length - 1 ? (
-                  <View style={{ height: 1, backgroundColor: '#2A2A40', marginHorizontal: 16 }} />
-                ) : null}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Blast My CV Banner */}
-        <TouchableOpacity
-          onPress={() => router.push('/packages')}
-          activeOpacity={0.9}
-          testID="blast-cv-button"
-          style={{ marginBottom: 24, marginHorizontal: 20 }}
-        >
-          <LinearGradient
-            colors={['#FF6B35', '#CC4A1A']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              borderRadius: 18,
-              padding: 20,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>
-                Blast My CV
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
-                Reach 15,000+ employers across the region
-              </Text>
-            </View>
-            <ChevronRight size={24} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Quick Actions */}
-        <View style={{ paddingHorizontal: 20 }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 16 }}>
-            Quick Actions
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Pressable
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: pressed ? '#FF5520' : '#FF6B35',
-                borderRadius: 14,
-                paddingVertical: 16,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-              })}
-              testID="update-cv-button"
-            >
-              <FileEdit size={18} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>Update CV</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: pressed ? '#FF6B3522' : '#FF6B3515',
-                borderRadius: 14,
-                paddingVertical: 16,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                borderWidth: 1,
-                borderColor: '#FF6B3560',
-              })}
-              testID="browse-jobs-button"
-            >
-              <Search size={18} color="#FF6B35" />
-              <Text style={{ color: '#FF6B35', fontWeight: '700', fontSize: 15 }}>Browse Jobs</Text>
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        <Text style={{ color: '#FF6B35', fontSize: 13, fontWeight: '700' }}>${order.totalPrice}</Text>
+      </View>
+    </View>
   );
 }

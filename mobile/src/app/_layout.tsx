@@ -21,6 +21,7 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="packages" options={{ presentation: 'modal', headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
             <Stack.Screen name="+not-found" />
           </Stack>
         </QueryClientProvider>

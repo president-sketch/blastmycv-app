@@ -2,9 +2,18 @@ import React, { useState } from 'react';
 import { View, Text, FlatList, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Building2, Calendar } from 'lucide-react-native';
-import { Application } from '../../lib/types/blastmycv';
 
-const MOCK_APPLICATIONS: Application[] = [
+interface ApplicationItem {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  company: string;
+  status: 'pending' | 'reviewing' | 'interview' | 'offer' | 'rejected';
+  appliedAt: string;
+  updatedAt: string;
+}
+
+const MOCK_APPLICATIONS: ApplicationItem[] = [
   {
     id: '1',
     jobId: 'j1',
@@ -61,11 +70,11 @@ const MOCK_APPLICATIONS: Application[] = [
   },
 ];
 
-type StatusFilter = 'All' | Application['status'];
+type StatusFilter = 'All' | ApplicationItem['status'];
 
 const STATUS_FILTERS: StatusFilter[] = ['All', 'pending', 'reviewing', 'interview', 'offer', 'rejected'];
 
-const STATUS_CONFIG: Record<Application['status'], { label: string; color: string; bg: string }> = {
+const STATUS_CONFIG: Record<ApplicationItem['status'], { label: string; color: string; bg: string }> = {
   pending: { label: 'Pending', color: '#888899', bg: '#88889922' },
   reviewing: { label: 'In Review', color: '#3B82F6', bg: '#3B82F622' },
   interview: { label: 'Interview', color: '#22C55E', bg: '#22C55E22' },
@@ -73,9 +82,9 @@ const STATUS_CONFIG: Record<Application['status'], { label: string; color: strin
   rejected: { label: 'Rejected', color: '#EF4444', bg: '#EF444422' },
 };
 
-const TIMELINE_STEPS: Application['status'][] = ['pending', 'reviewing', 'interview', 'offer'];
+const TIMELINE_STEPS: ApplicationItem['status'][] = ['pending', 'reviewing', 'interview', 'offer'];
 
-function StatusBadge({ status }: { status: Application['status'] }) {
+function StatusBadge({ status }: { status: ApplicationItem['status'] }) {
   const config = STATUS_CONFIG[status];
   return (
     <View
@@ -94,7 +103,7 @@ function StatusBadge({ status }: { status: Application['status'] }) {
   );
 }
 
-function TimelineDots({ status }: { status: Application['status'] }) {
+function TimelineDots({ status }: { status: ApplicationItem['status'] }) {
   if (status === 'rejected') {
     return (
       <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 10 }}>
@@ -136,7 +145,7 @@ function TimelineDots({ status }: { status: Application['status'] }) {
   );
 }
 
-function ApplicationCard({ application }: { application: Application }) {
+function ApplicationCard({ application }: { application: ApplicationItem }) {
   return (
     <View
       style={{
@@ -235,8 +244,8 @@ export default function ApplicationsScreen() {
       >
         {STATUS_FILTERS.map((filter) => {
           const isActive = activeFilter === filter;
-          const label = filter === 'All' ? 'All' : STATUS_CONFIG[filter as Application['status']].label;
-          const color = filter === 'All' ? '#FF6B35' : STATUS_CONFIG[filter as Application['status']].color;
+          const label = filter === 'All' ? 'All' : STATUS_CONFIG[filter as ApplicationItem['status']].label;
+          const color = filter === 'All' ? '#FF6B35' : STATUS_CONFIG[filter as ApplicationItem['status']].color;
           return (
             <Pressable
               key={filter}

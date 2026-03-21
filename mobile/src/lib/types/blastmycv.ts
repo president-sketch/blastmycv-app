@@ -12,49 +12,81 @@ export interface Package {
   createdAt: string;
 }
 
-export interface JobListing {
+export interface CV {
+  id: number;
+  userId: number;
+  title: string;
+  fileName: string;
+  fileUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Order {
+  id: number;
+  userId: number;
+  packageId: number;
+  cvId: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  targetCountries: string[];
+  totalPrice: string;
+  package?: Package;
+  cv?: CV;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Submission {
+  id: number;
+  orderId: number;
+  employerName: string;
+  employerEmail?: string;
+  country: string;
+  status: 'sent' | 'delivered' | 'opened' | 'failed';
+  sentAt: string;
+}
+
+export interface Notification {
+  id: number;
+  userId: number;
+  title: string;
+  message: string;
+  type: 'order' | 'submission' | 'system';
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface UserProfile {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  nationality?: string;
+  currentLocation?: string;
+  jobTitle?: string;
+  yearsExperience?: number;
+  preferredIndustry?: string;
+  createdAt?: string;
+}
+
+// Legacy aliases kept for compatibility
+export type JobListing = {
   id: string;
   title: string;
   company: string;
   location: string;
-  type: 'full-time' | 'part-time' | 'contract' | 'remote';
+  type: string;
   salary?: string;
   description: string;
-  requirements?: string[];
   postedAt: string;
-  logo?: string;
-}
+};
 
-export interface Application {
-  id: string;
-  jobId: string;
-  jobTitle: string;
-  company: string;
-  status: 'pending' | 'reviewing' | 'interview' | 'offer' | 'rejected';
-  appliedAt: string;
-  updatedAt: string;
-  logo?: string;
-}
-
-export interface CVSection {
-  id: string;
-  type: 'experience' | 'education' | 'skills' | 'summary';
-  title: string;
-  content: string;
-  order: number;
-}
-
-export interface CV {
-  id: string;
-  userId: string;
-  title: string;
-  sections: CVSection[];
-  updatedAt: string;
-}
+export type Application = Order;
 
 export interface DashboardStats {
-  totalApplications: number;
-  profileViews: number;
-  jobMatches: number;
-  interviewsScheduled: number;
+  totalOrders: number;
+  totalSubmissions: number;
+  cvCount: number;
+  unreadNotifications: number;
 }

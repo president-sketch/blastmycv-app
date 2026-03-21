@@ -1,231 +1,194 @@
 import { useAuthStore } from '../state/auth-store';
 import type { User } from '../state/auth-store';
-import type { Package, Application, JobListing } from '../types/blastmycv';
+import type {
+  Package, CV, Order, Submission, Notification, UserProfile
+} from '../types/blastmycv';
 
-const BLASTMYCV_API_BASE = 'https://blastmycv.com/api';
-const INTERNAL_API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE = 'https://blastmycv.com/api';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-// Extracts cookie name=value pairs from Set-Cookie header (strips attributes like Path, HttpOnly, etc.)
-function extractCookies(setCookieHeader: string): string {
-  return setCookieHeader
+function extractCookies(header: string): string {
+  return header
     .split(/,(?=[^;]+=[^;]+)/)
-    .map((part) => part.split(';')[0].trim())
+    .map((p) => p.split(';')[0].trim())
     .filter(Boolean)
     .join('; ');
 }
 
-async function request<T>(
-  baseUrl: string,
+function getCookie(): string | null {
+  return useAuthStore.getState().sessionCookie;
+}
+
+async function req<T>(
   path: string,
   method: Method,
   body?: unknown,
-  requiresAuth = false,
-  isMultipart = false
+  auth = false,
+  multipart = false
 ): Promise<T> {
-  const sessionCookie = useAuthStore.getState().sessionCookie;
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (!multipart) headers['Content-Type'] = 'application/json';
+  const cookie = getCookie();
+  if (auth && cookie) headers['Cookie'] = cookie;
 
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-
-  if (!isMultipart) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  if (sessionCookie && requiresAuth) {
-    headers['Cookie'] = sessionCookie;
-  }
-
-  const response = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
-    body: isMultipart
-      ? (body as FormData)
-      : body
-      ? JSON.stringify(body)
-      : undefined,
     credentials: 'include',
+    body: multipart ? (body as FormData) : body ? JSON.stringify(body) : undefined,
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || error.error || `HTTP ${response.status}`);
+  // Session expired
+  if (res.status === 401 && auth) {
+    useAuthStore.getState().logout();
+    throw new Error('Session expired. Please sign in again.');
   }
 
-  if (response.status === 204) {
-    return undefined as T;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.error || `HTTP ${res.status}`);
   }
 
-  return response.json();
+  if (res.status === 204) return undefined as T;
+  return res.json();
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-export const publicAPI = {
-  get: <T>(path: string) => request<T>(BLASTMYCV_API_BASE, path, 'GET', undefined, false),
-  post: <T>(path: string, body: unknown) => request<T>(BLASTMYCV_API_BASE, path, 'POST', body, false),
-};
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
-// ─── Authenticated API ────────────────────────────────────────────────────────
-export const blastAPI = {
-  get: <T>(path: string) => request<T>(BLASTMYCV_API_BASE, path, 'GET', undefined, true),
-  post: <T>(path: string, body: unknown) => request<T>(BLASTMYCV_API_BASE, path, 'POST', body, true),
-  put: <T>(path: string, body: unknown) => request<T>(BLASTMYCV_API_BASE, path, 'PUT', body, true),
-  patch: <T>(path: string, body: unknown) => request<T>(BLASTMYCV_API_BASE, path, 'PATCH', body, true),
-  delete: <T>(path: string) => request<T>(BLASTMYCV_API_BASE, path, 'DELETE', undefined, true),
-};
-
-// ─── Internal backend ─────────────────────────────────────────────────────────
-export const internalAPI = {
-  get: <T>(path: string) => request<T>(INTERNAL_API_BASE ?? '', path, 'GET', undefined, true),
-  post: <T>(path: string, body: unknown) => request<T>(INTERNAL_API_BASE ?? '', path, 'POST', body, true),
-};
-
-// ─── CONFIRMED ENDPOINTS ──────────────────────────────────────────────────────
-
-// POST /auth/login
 export async function loginUser(email: string, password: string): Promise<{ sessionCookie: string; user: User }> {
-  const response = await fetch(`${BLASTMYCV_API_BASE}/auth/login`, {
+  const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ email, password }),
     credentials: 'include',
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Invalid email or password.' }));
-    throw new Error(error.message || error.error || 'Login failed');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.error || 'Invalid email or password.');
   }
+  const raw = res.headers.get('set-cookie') ?? '';
+  const sessionCookie = raw ? extractCookies(raw) : '';
 
-  // Extract PHP session cookie from response headers
-  const rawCookie = response.headers.get('set-cookie') ?? '';
-  const sessionCookie = rawCookie ? extractCookies(rawCookie) : '';
-
-  // Fetch current user profile using the fresh cookie
-  const meResponse = await fetch(`${BLASTMYCV_API_BASE}/auth/me`, {
-    headers: {
-      Accept: 'application/json',
-      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-    },
+  const meRes = await fetch(`${BASE}/auth/me`, {
+    headers: { Accept: 'application/json', ...(sessionCookie ? { Cookie: sessionCookie } : {}) },
     credentials: 'include',
   });
-
-  const user: User = await meResponse.json();
-
-  // Normalise name field
+  const user: User = await meRes.json();
   if (!user.name && (user.firstName || user.lastName)) {
     user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   }
-
   return { sessionCookie, user };
 }
 
-// POST /auth/register
 export async function registerUser(data: {
-  email: string;
-  password: string;
-  confirmPassword: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
+  email: string; password: string; confirmPassword: string;
+  firstName: string; lastName: string; phone: string;
   cvFile?: { uri: string; name: string; type: string };
 }): Promise<{ sessionCookie: string; user: User }> {
-  let response: Response;
-
+  let res: Response;
   if (data.cvFile) {
-    // Multipart when CV file is attached
     const form = new FormData();
-    form.append('email', data.email);
-    form.append('password', data.password);
-    form.append('confirmPassword', data.confirmPassword);
-    form.append('firstName', data.firstName);
-    form.append('lastName', data.lastName);
-    form.append('phone', data.phone);
+    Object.entries(data).forEach(([k, v]) => { if (k !== 'cvFile' && v) form.append(k, String(v)); });
     form.append('cv', { uri: data.cvFile.uri, name: data.cvFile.name, type: data.cvFile.type } as unknown as Blob);
-
-    response = await fetch(`${BLASTMYCV_API_BASE}/auth/register`, {
-      method: 'POST',
-      body: form,
-      credentials: 'include',
-    });
+    res = await fetch(`${BASE}/auth/register`, { method: 'POST', body: form, credentials: 'include' });
   } else {
-    response = await fetch(`${BLASTMYCV_API_BASE}/auth/register`, {
+    res = await fetch(`${BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        email: data.email,
-        password: data.password,
-        confirmPassword: data.confirmPassword,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone: data.phone,
-      }),
+      body: JSON.stringify({ email: data.email, password: data.password, confirmPassword: data.confirmPassword, firstName: data.firstName, lastName: data.lastName, phone: data.phone }),
       credentials: 'include',
     });
   }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Registration failed.' }));
-    throw new Error(error.message || error.error || 'Registration failed');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.error || 'Registration failed.');
   }
-
-  const rawCookie = response.headers.get('set-cookie') ?? '';
-  const sessionCookie = rawCookie ? extractCookies(rawCookie) : '';
-
-  const meResponse = await fetch(`${BLASTMYCV_API_BASE}/auth/me`, {
-    headers: {
-      Accept: 'application/json',
-      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-    },
+  const raw = res.headers.get('set-cookie') ?? '';
+  const sessionCookie = raw ? extractCookies(raw) : '';
+  const meRes = await fetch(`${BASE}/auth/me`, {
+    headers: { Accept: 'application/json', ...(sessionCookie ? { Cookie: sessionCookie } : {}) },
     credentials: 'include',
   });
-
-  const user: User = await meResponse.json();
-  if (!user.name && (user.firstName || user.lastName)) {
-    user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
-  }
-
+  const user: User = await meRes.json();
+  if (!user.name && (user.firstName || user.lastName)) user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   return { sessionCookie, user };
 }
 
-// POST /auth/logout
 export async function logoutUser(): Promise<void> {
-  const sessionCookie = useAuthStore.getState().sessionCookie;
-  await fetch(`${BLASTMYCV_API_BASE}/auth/logout`, {
+  const cookie = getCookie();
+  await fetch(`${BASE}/auth/logout`, {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-    },
+    headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
     credentials: 'include',
-  }).catch(() => {
-    // Ignore errors — we clear local session regardless
-  });
+  }).catch(() => {});
 }
 
-// GET /packages — confirmed live
+export async function getMe(): Promise<User> {
+  return req<User>('/auth/me', 'GET', undefined, true);
+}
+
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+export async function getUserProfile(): Promise<UserProfile> {
+  return req<UserProfile>('/user/profile', 'GET', undefined, true);
+}
+
+export async function updateUserProfile(data: Partial<UserProfile>): Promise<UserProfile> {
+  return req<UserProfile>('/user/profile', 'PUT', data, true);
+}
+
+export async function changePassword(data: {
+  currentPassword: string; newPassword: string; confirmPassword: string;
+}): Promise<void> {
+  return req<void>('/user/change-password', 'POST', data, true);
+}
+
+// ─── CVs ──────────────────────────────────────────────────────────────────────
+
+export async function getCVs(): Promise<CV[]> {
+  return req<CV[]>('/cvs', 'GET', undefined, true);
+}
+
+export async function uploadCV(file: { uri: string; name: string; type: string }, title: string): Promise<CV> {
+  const form = new FormData();
+  form.append('cv', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  form.append('title', title);
+  return req<CV>('/cvs', 'POST', form, true, true);
+}
+
+// ─── Packages ─────────────────────────────────────────────────────────────────
+
 export async function getPackages(): Promise<Package[]> {
-  return publicAPI.get<Package[]>('/packages');
+  return req<Package[]>('/packages', 'GET', undefined, false);
 }
 
-// GET /auth/me — confirmed
-export async function getProfile(): Promise<User> {
-  return blastAPI.get<User>('/auth/me');
+// ─── Orders ───────────────────────────────────────────────────────────────────
+
+export async function getOrders(): Promise<Order[]> {
+  return req<Order[]>('/orders', 'GET', undefined, true);
 }
 
-// GET /applications — TODO: confirm response shape
-export async function getApplications(): Promise<Application[]> {
-  return blastAPI.get<Application[]>('/applications');
+export async function createOrder(data: {
+  packageId: number; cvId: number; targetCountries: string[];
+}): Promise<Order> {
+  return req<Order>('/orders', 'POST', data, true);
 }
 
-// GET /jobs — TODO: confirm response shape
-export async function getJobs(params?: { search?: string; type?: string }): Promise<JobListing[]> {
-  const query = params
-    ? '?' + new URLSearchParams(params as Record<string, string>).toString()
-    : '';
-  return blastAPI.get<JobListing[]>(`/jobs${query}`);
+// ─── Submissions ──────────────────────────────────────────────────────────────
+
+export async function getSubmissions(): Promise<Submission[]> {
+  return req<Submission[]>('/submissions', 'GET', undefined, true);
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export async function getNotifications(): Promise<Notification[]> {
+  return req<Notification[]>('/notifications', 'GET', undefined, true);
+}
+
+// ─── Support ──────────────────────────────────────────────────────────────────
+
+export async function contactSupport(data: { subject: string; message: string }): Promise<void> {
+  return req<void>('/support/contact', 'POST', data, true);
 }
