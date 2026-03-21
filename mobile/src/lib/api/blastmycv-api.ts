@@ -8,19 +8,27 @@ import type {
 // The proxy forwards requests server-to-server to https://blastmycv.com/api
 const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/proxy`;
 
+// Switch to 'jwt' when blastmycv.com migrates from session cookies to JWT tokens.
+const AUTH_MODE: 'session' | 'jwt' = 'session';
+
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-// Module-level cookie cache — set synchronously on login to avoid Zustand AsyncStorage
+// Module-level token cache — set synchronously on login to avoid Zustand AsyncStorage
 // hydration timing issues (async hydration can overwrite freshly set state).
 let _activeCookie: string | null = null;
 
 // Keep in sync with the auth store (catches hydration restores and logout)
 useAuthStore.subscribe((state) => {
-  _activeCookie = state.sessionCookie;
+  _activeCookie = state.authToken;
 });
 
+/** Call this when switching to JWT mode and a token is received out-of-band. */
+export function setJwtToken(token: string | null): void {
+  _activeCookie = token;
+}
+
 function getCookie(): string | null {
-  const cookie = _activeCookie ?? useAuthStore.getState().sessionCookie;
+  const cookie = _activeCookie ?? useAuthStore.getState().authToken;
   console.log('[getCookie]', cookie ? cookie.slice(0, 30) + '…' : 'null');
   return cookie;
 }
@@ -35,7 +43,13 @@ async function req<T>(
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (!multipart) headers['Content-Type'] = 'application/json';
   const cookie = getCookie();
-  if (auth && cookie) headers['X-Session-Cookie'] = cookie;
+  if (auth && cookie) {
+    if (AUTH_MODE === 'jwt') {
+      headers['Authorization'] = `Bearer ${cookie}`;
+    } else {
+      headers['X-Session-Cookie'] = cookie;
+    }
+  }
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -75,9 +89,9 @@ export async function loginUser(email: string, password: string): Promise<{ sess
     throw new Error(err.message || err.error || 'Invalid email or password.');
   }
 
-  // Backend extracts Set-Cookie server-side and returns { sessionCookie, user } in body
-  const { sessionCookie, user } = await res.json();
-  console.log('[BlastMyCV] Session cookie:', sessionCookie ? 'received' : 'none');
+  // Proxy always returns { authToken, user } regardless of session vs JWT mode
+  const { authToken, user } = await res.json();
+  console.log('[BlastMyCV] Auth token:', authToken ? 'received' : 'none');
   console.log('[BlastMyCV] User:', user?.email ?? 'unknown');
 
   if (!user?.email) {
@@ -88,11 +102,12 @@ export async function loginUser(email: string, password: string): Promise<{ sess
     user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   }
 
-  // Set module-level cookie immediately so getCookie() works in subsequent requests
+  // Set module-level token immediately so getCookie() works in subsequent requests
   // even before Zustand's async AsyncStorage hydration completes.
-  _activeCookie = sessionCookie ?? null;
+  _activeCookie = authToken ?? null;
 
-  return { sessionCookie: sessionCookie ?? '', user };
+  // Return as sessionCookie so existing callers (login.tsx, register.tsx) stay unchanged
+  return { sessionCookie: authToken ?? '', user };
 }
 
 export async function registerUser(data: {

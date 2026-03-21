@@ -15,10 +15,10 @@ export interface User {
 }
 
 interface AuthState {
-  sessionCookie: string | null;
+  authToken: string | null;
   user: User | null;
   isAuthenticated: boolean;
-  setAuth: (sessionCookie: string, user: User) => void;
+  setAuth: (authToken: string, user: User) => void;
   updateUser: (user: Partial<User>) => void;
   logout: () => void;
 }
@@ -26,18 +26,28 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      sessionCookie: null,
+      authToken: null,
       user: null,
       isAuthenticated: false,
-      setAuth: (sessionCookie, user) => set({ sessionCookie, user, isAuthenticated: true }),
+      setAuth: (authToken, user) => set({ authToken, user, isAuthenticated: true }),
       updateUser: (userData) => set((state) => ({
         user: state.user ? { ...state.user, ...userData } : null,
       })),
-      logout: () => set({ sessionCookie: null, user: null, isAuthenticated: false }),
+      logout: () => set({ authToken: null, user: null, isAuthenticated: false }),
     }),
     {
       name: 'blastmycv-auth',
       storage: createJSONStorage(() => AsyncStorage),
+      // Backward compat: persisted data may use old `sessionCookie` key name
+      merge: (persisted: unknown, current: AuthState): AuthState => {
+        const p = persisted as Partial<AuthState & { sessionCookie?: string | null }>;
+        return {
+          ...current,
+          ...p,
+          // Accept legacy `sessionCookie` field from older persisted data
+          authToken: p.authToken ?? p.sessionCookie ?? current.authToken,
+        };
+      },
     }
   )
 );
