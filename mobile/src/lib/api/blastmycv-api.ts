@@ -57,27 +57,53 @@ async function req<T>(
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function loginUser(email: string, password: string): Promise<{ sessionCookie: string; user: User }> {
+  // Step 1: POST /auth/login
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ email, password }),
     credentials: 'include',
   });
+
+  console.log('[BlastMyCV] POST /auth/login status:', res.status);
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || err.error || 'Invalid email or password.');
   }
+
+  // Step 2: Extract session cookie from response headers.
+  // On iOS, NSURLSession may consume Set-Cookie before JS sees it — that's OK,
+  // the cookie is stored in NSHTTPCookieStorage and sent automatically via credentials:'include'.
   const raw = res.headers.get('set-cookie') ?? '';
   const sessionCookie = raw ? extractCookies(raw) : '';
+  console.log('[BlastMyCV] Session cookie extracted:', sessionCookie ? 'yes' : 'none (platform-managed)');
+
+  // Step 3: GET /auth/me to confirm session and load user data
+  const meHeaders: Record<string, string> = { Accept: 'application/json' };
+  if (sessionCookie) meHeaders['Cookie'] = sessionCookie;
 
   const meRes = await fetch(`${BASE}/auth/me`, {
-    headers: { Accept: 'application/json', ...(sessionCookie ? { Cookie: sessionCookie } : {}) },
+    method: 'GET',
+    headers: meHeaders,
     credentials: 'include',
   });
+
+  console.log('[BlastMyCV] GET /auth/me status:', meRes.status);
+
+  if (!meRes.ok) {
+    // Login worked but session not accessible — network/CORS issue
+    throw new Error('Signed in but could not load your profile. Please try again.');
+  }
+
   const user: User = await meRes.json();
+  console.log('[BlastMyCV] User loaded:', user?.email ?? 'unknown');
+
+  // Normalise name field
   if (!user.name && (user.firstName || user.lastName)) {
     user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   }
+
   return { sessionCookie, user };
 }
 
@@ -106,10 +132,20 @@ export async function registerUser(data: {
   }
   const raw = res.headers.get('set-cookie') ?? '';
   const sessionCookie = raw ? extractCookies(raw) : '';
+
+  const meHeaders: Record<string, string> = { Accept: 'application/json' };
+  if (sessionCookie) meHeaders['Cookie'] = sessionCookie;
+
   const meRes = await fetch(`${BASE}/auth/me`, {
-    headers: { Accept: 'application/json', ...(sessionCookie ? { Cookie: sessionCookie } : {}) },
+    method: 'GET',
+    headers: meHeaders,
     credentials: 'include',
   });
+
+  if (!meRes.ok) {
+    throw new Error('Registration succeeded but could not load your profile. Please sign in.');
+  }
+
   const user: User = await meRes.json();
   if (!user.name && (user.firstName || user.lastName)) user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   return { sessionCookie, user };
