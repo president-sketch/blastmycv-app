@@ -35,7 +35,7 @@ async function req<T>(
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (!multipart) headers['Content-Type'] = 'application/json';
   const cookie = getCookie();
-  if (auth && cookie) headers['Cookie'] = cookie;
+  if (auth && cookie) headers['X-Session-Cookie'] = cookie;
 
   const res = await fetch(`${BASE}${path}`, {
     method,
