@@ -10,14 +10,6 @@ const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/proxy`;
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-function extractCookies(header: string): string {
-  return header
-    .split(/,(?=[^;]+=[^;]+)/)
-    .map((p) => p.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
-}
-
 function getCookie(): string | null {
   return useAuthStore.getState().sessionCookie;
 }
@@ -59,12 +51,10 @@ async function req<T>(
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function loginUser(email: string, password: string): Promise<{ sessionCookie: string; user: User }> {
-  // Step 1: POST /auth/login
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ email, password }),
-    credentials: 'include',
   });
 
   console.log('[BlastMyCV] POST /auth/login status:', res.status);
@@ -74,83 +64,41 @@ export async function loginUser(email: string, password: string): Promise<{ sess
     throw new Error(err.message || err.error || 'Invalid email or password.');
   }
 
-  // Step 2: Extract session cookie from response headers.
-  // On iOS, NSURLSession may consume Set-Cookie before JS sees it — that's OK,
-  // the cookie is stored in NSHTTPCookieStorage and sent automatically via credentials:'include'.
-  const raw = res.headers.get('set-cookie') ?? '';
-  const sessionCookie = raw ? extractCookies(raw) : '';
-  console.log('[BlastMyCV] Session cookie extracted:', sessionCookie ? 'yes' : 'none (platform-managed)');
+  // Backend extracts Set-Cookie server-side and returns { sessionCookie, user } in body
+  const { sessionCookie, user } = await res.json();
+  console.log('[BlastMyCV] Session cookie:', sessionCookie ? 'received' : 'none');
+  console.log('[BlastMyCV] User:', user?.email ?? 'unknown');
 
-  // Step 3: GET /auth/me to confirm session and load user data
-  const meHeaders: Record<string, string> = { Accept: 'application/json' };
-  if (sessionCookie) meHeaders['Cookie'] = sessionCookie;
-
-  const meRes = await fetch(`${BASE}/auth/me`, {
-    method: 'GET',
-    headers: meHeaders,
-    credentials: 'include',
-  });
-
-  console.log('[BlastMyCV] GET /auth/me status:', meRes.status);
-
-  if (!meRes.ok) {
-    // Login worked but session not accessible — network/CORS issue
+  if (!user?.email) {
     throw new Error('Signed in but could not load your profile. Please try again.');
   }
 
-  const user: User = await meRes.json();
-  console.log('[BlastMyCV] User loaded:', user?.email ?? 'unknown');
-
-  // Normalise name field
   if (!user.name && (user.firstName || user.lastName)) {
     user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   }
 
-  return { sessionCookie, user };
+  return { sessionCookie: sessionCookie ?? '', user };
 }
 
 export async function registerUser(data: {
   email: string; password: string; confirmPassword: string;
   firstName: string; lastName: string; phone: string;
-  cvFile?: { uri: string; name: string; type: string };
 }): Promise<{ sessionCookie: string; user: User }> {
-  let res: Response;
-  if (data.cvFile) {
-    const form = new FormData();
-    Object.entries(data).forEach(([k, v]) => { if (k !== 'cvFile' && v) form.append(k, String(v)); });
-    form.append('cv', { uri: data.cvFile.uri, name: data.cvFile.name, type: data.cvFile.type } as unknown as Blob);
-    res = await fetch(`${BASE}/auth/register`, { method: 'POST', body: form, credentials: 'include' });
-  } else {
-    res = await fetch(`${BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ email: data.email, password: data.password, confirmPassword: data.confirmPassword, firstName: data.firstName, lastName: data.lastName, phone: data.phone }),
-      credentials: 'include',
-    });
-  }
+  const res = await fetch(`${BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email: data.email, password: data.password, confirmPassword: data.confirmPassword, firstName: data.firstName, lastName: data.lastName, phone: data.phone }),
+  });
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || err.error || 'Registration failed.');
   }
-  const raw = res.headers.get('set-cookie') ?? '';
-  const sessionCookie = raw ? extractCookies(raw) : '';
 
-  const meHeaders: Record<string, string> = { Accept: 'application/json' };
-  if (sessionCookie) meHeaders['Cookie'] = sessionCookie;
-
-  const meRes = await fetch(`${BASE}/auth/me`, {
-    method: 'GET',
-    headers: meHeaders,
-    credentials: 'include',
-  });
-
-  if (!meRes.ok) {
-    throw new Error('Registration succeeded but could not load your profile. Please sign in.');
-  }
-
-  const user: User = await meRes.json();
+  const { sessionCookie, user } = await res.json();
+  if (!user?.email) throw new Error('Registration succeeded but could not load your profile. Please sign in.');
   if (!user.name && (user.firstName || user.lastName)) user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
-  return { sessionCookie, user };
+  return { sessionCookie: sessionCookie ?? '', user };
 }
 
 export async function logoutUser(): Promise<void> {
