@@ -15,6 +15,7 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../lib/state/auth-store';
+import { logoutUser } from '../../lib/api/blastmycv-api';
 
 const SETTINGS_SECTIONS = [
   {
@@ -64,19 +65,9 @@ export default function ProfileScreen() {
     Alert.alert(label, `${label} coming soon.`, [{ text: 'OK' }]);
   };
 
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: logout,
-        },
-      ]
-    );
+  const handleSignOut = async () => {
+    await logoutUser();
+    logout();
   };
 
   return (
