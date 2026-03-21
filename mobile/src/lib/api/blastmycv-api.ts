@@ -4,7 +4,9 @@ import type {
   Package, CV, Order, Submission, Notification, UserProfile
 } from '../types/blastmycv';
 
-const BASE = 'https://blastmycv.com/api';
+// Route through our backend proxy to avoid CORS issues in web/browser environments.
+// The proxy forwards requests server-to-server to https://blastmycv.com/api
+const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/proxy`;
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
