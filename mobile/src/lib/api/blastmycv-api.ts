@@ -149,7 +149,9 @@ export async function changePassword(data: {
 // ─── CVs ──────────────────────────────────────────────────────────────────────
 
 export async function getCVs(): Promise<CV[]> {
-  return req<CV[]>('/cvs', 'GET', undefined, true);
+  const data = await req<CV[] | { cvs: CV[] }>('/cvs', 'GET', undefined, true).catch(() => []);
+  if (Array.isArray(data)) return data;
+  return (data as { cvs: CV[] })?.cvs ?? [];
 }
 
 export async function uploadCV(file: { uri: string; name: string; type: string }, title: string): Promise<CV> {
@@ -168,7 +170,9 @@ export async function getPackages(): Promise<Package[]> {
 // ─── Orders ───────────────────────────────────────────────────────────────────
 
 export async function getOrders(): Promise<Order[]> {
-  return req<Order[]>('/orders', 'GET', undefined, true);
+  const data = await req<Order[] | { orders: Order[]; total: number }>('/orders', 'GET', undefined, true);
+  if (Array.isArray(data)) return data;
+  return (data as { orders: Order[] })?.orders ?? [];
 }
 
 export async function createOrder(data: {
@@ -186,7 +190,9 @@ export async function getSubmissions(): Promise<Submission[]> {
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export async function getNotifications(): Promise<Notification[]> {
-  return req<Notification[]>('/notifications', 'GET', undefined, true);
+  const data = await req<Notification[] | { notifications: Notification[] }>('/notifications', 'GET', undefined, true).catch(() => []);
+  if (Array.isArray(data)) return data;
+  return (data as { notifications: Notification[] })?.notifications ?? [];
 }
 
 // ─── Support ──────────────────────────────────────────────────────────────────
