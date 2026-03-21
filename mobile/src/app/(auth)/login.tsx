@@ -43,6 +43,18 @@ export default function LoginScreen() {
     }
   }
 
+  function handleDemoLogin() {
+    setAuth('demo-token', {
+      id: 'demo-user',
+      email: 'demo@blastmycv.com',
+      name: 'Alex Johnson',
+      firstName: 'Alex',
+      lastName: 'Johnson',
+      headline: 'Senior Software Engineer',
+      location: 'London, UK',
+    });
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#0A0A14' }}>
       <StatusBar style="light" />
@@ -209,6 +221,26 @@ export default function LoginScreen() {
                   {' '}and sign in here.
                 </Text>
               </View>
+
+              {/* Demo Mode */}
+              <TouchableOpacity
+                onPress={handleDemoLogin}
+                activeOpacity={0.7}
+                testID="demo-button"
+                style={{
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: '#2A2A40',
+                  height: 48,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 40,
+                }}
+              >
+                <Text style={{ color: '#666688', fontSize: 14, fontWeight: '500' }}>
+                  Preview app (Demo Mode)
+                </Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
