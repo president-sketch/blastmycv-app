@@ -26,9 +26,21 @@ blastProxy.all('/*', async (c) => {
   const contentType = c.req.header('Content-Type');
   if (contentType) forwardHeaders['Content-Type'] = contentType;
 
-  // Forward session cookie if present
-  const cookie = c.req.header('Cookie') ?? c.req.header('X-Session-Cookie');
-  if (cookie) forwardHeaders['Cookie'] = cookie;
+  // For login requests, strip any existing cookies — stale/expired session cookies
+  // from the mobile app can cause blastmycv.com to return 401 thinking it's a bad session.
+  const isLoginPath = apiPath.endsWith('/auth/login');
+  if (!isLoginPath) {
+    const cookie = c.req.header('Cookie') ?? c.req.header('X-Session-Cookie');
+    if (cookie) {
+      forwardHeaders['Cookie'] = cookie;
+      console.log('[BlastProxy] Forwarding Cookie header (non-login path)');
+    }
+  } else {
+    const cookie = c.req.header('Cookie') ?? c.req.header('X-Session-Cookie');
+    if (cookie) {
+      console.log('[BlastProxy] STRIPPED Cookie header on login path to avoid stale session interference');
+    }
+  }
 
   // Forward body for non-GET requests
   let body: Blob | string | undefined;
@@ -42,8 +54,11 @@ blastProxy.all('/*', async (c) => {
       delete forwardHeaders['Content-Type'];
     } else {
       body = await c.req.text();
+      console.log('[BlastProxy] Request body:', body);
     }
   }
+
+  console.log('[BlastProxy] Forwarding headers:', JSON.stringify(forwardHeaders));
 
   let response: Response;
   try {
@@ -67,6 +82,8 @@ blastProxy.all('/*', async (c) => {
   if (setCookie) resHeaders['Set-Cookie'] = setCookie;
 
   const responseBody = await response.text();
+
+  console.log('[BlastProxy] Response status:', response.status, '| Body:', responseBody.slice(0, 500));
 
   return new Response(responseBody, {
     status: response.status,
