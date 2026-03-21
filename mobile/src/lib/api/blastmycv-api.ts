@@ -10,8 +10,19 @@ const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/proxy`;
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+// Module-level cookie cache — set synchronously on login to avoid Zustand AsyncStorage
+// hydration timing issues (async hydration can overwrite freshly set state).
+let _activeCookie: string | null = null;
+
+// Keep in sync with the auth store (catches hydration restores and logout)
+useAuthStore.subscribe((state) => {
+  _activeCookie = state.sessionCookie;
+});
+
 function getCookie(): string | null {
-  return useAuthStore.getState().sessionCookie;
+  const cookie = _activeCookie ?? useAuthStore.getState().sessionCookie;
+  console.log('[getCookie]', cookie ? cookie.slice(0, 30) + '…' : 'null');
+  return cookie;
 }
 
 async function req<T>(
@@ -77,6 +88,10 @@ export async function loginUser(email: string, password: string): Promise<{ sess
     user.name = [user.firstName, user.lastName].filter(Boolean).join(' ');
   }
 
+  // Set module-level cookie immediately so getCookie() works in subsequent requests
+  // even before Zustand's async AsyncStorage hydration completes.
+  _activeCookie = sessionCookie ?? null;
+
   return { sessionCookie: sessionCookie ?? '', user };
 }
 
@@ -103,6 +118,7 @@ export async function registerUser(data: {
 
 export async function logoutUser(): Promise<void> {
   const cookie = getCookie();
+  _activeCookie = null;
   await fetch(`${BASE}/auth/logout`, {
     method: 'POST',
     headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
